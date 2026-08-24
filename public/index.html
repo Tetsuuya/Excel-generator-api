@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Excel Generator - Fast, Secure, Intelligent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #F8FAFC;
+      --card-bg: #FFFFFF;
+      --text-main: #0F172A;
+      --text-muted: #64748B;
+      --border: #E2E8F0;
+      --border-focus: #94A3B8;
+      --primary: #0F766E;
+      --primary-hover: #0D655E;
+      --primary-light: #F0FDFA;
+      --primary-border: #CCFBF1;
+      --accent: #2563EB;
+      --badge-bg: #F1F5F9;
+      --badge-text: #334155;
+      --success: #16A34A;
+      --radius: 12px;
+      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+      --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+      --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.04);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Top Nav */
+    header {
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 36px;
+      height: 36px;
+      background: var(--primary-light);
+      border: 1px solid var(--primary-border);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--primary);
+      font-size: 20px;
+    }
+
+    .brand-text h1 {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text-main);
+      letter-spacing: -0.01em;
+    }
+
+    .brand-text p {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .status-tags {
+      display: flex;
+      gap: 8px;
+    }
+
+    .tag {
+      font-size: 12px;
+      font-weight: 500;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tag-green {
+      background: #DCFCE7;
+      color: #15803D;
+      border: 1px solid #BBF7D0;
+    }
+
+    .tag-green::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      background: #16A34A;
+      border-radius: 50%;
+    }
+
+    .tag-muted {
+      background: var(--badge-bg);
+      color: var(--badge-text);
+      border: 1px solid var(--border);
+    }
+
+    /* Container */
+    main {
+      max-width: 960px;
+      width: 100%;
+      margin: 32px auto;
+      padding: 0 20px;
+      flex: 1;
+    }
+
+    /* Main Card */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+      padding: 28px;
+      margin-bottom: 24px;
+    }
+
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-main);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Quick Prompt Chips */
+    .chips-label {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .chips-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+
+    .chip {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 13px;
+      color: var(--text-main);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+
+    .chip:hover {
+      background: var(--primary-light);
+      border-color: var(--primary-border);
+      color: var(--primary);
+    }
+
+    /* Textarea */
+    .input-group {
+      margin-bottom: 18px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 120px;
+      padding: 14px 16px;
+      font-family: inherit;
+      font-size: 14px;
+      color: var(--text-main);
+      background: #FFFFFF;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      outline: none;
+      resize: vertical;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+    }
+
+    /* Options Grid */
+    .options-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+
+    @media (max-width: 640px) {
+      .options-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .field-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-main);
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    select, input[type="text"] {
+      width: 100%;
+      padding: 10px 14px;
+      font-family: inherit;
+      font-size: 14px;
+      color: var(--text-main);
+      background: #FFFFFF;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      outline: none;
+      transition: border-color 0.15s ease;
+    }
+
+    select:focus, input[type="text"]:focus {
+      border-color: var(--primary);
+    }
+
+    /* Actions */
+    .actions {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 11px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border: 1px solid transparent;
+      outline: none;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #FFFFFF;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .btn-secondary {
+      background: #FFFFFF;
+      color: var(--text-main);
+      border-color: var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg);
+      border-color: var(--border-focus);
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    /* Status Banner */
+    .status-panel {
+      display: none;
+      margin-top: 20px;
+      padding: 16px 20px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+    }
+
+    .status-panel.loading {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--primary-light);
+      border-color: var(--primary-border);
+      color: var(--primary);
+    }
+
+    .status-panel.success {
+      display: block;
+      background: #F0FDF4;
+      border-color: #BBF7D0;
+    }
+
+    .status-panel.error {
+      display: block;
+      background: #FEF2F2;
+      border-color: #FECACA;
+      color: #991B1B;
+    }
+
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(15, 118, 110, 0.25);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Result Meta */
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(0, 0, 0, 0.06);
+    }
+
+    @media (max-width: 640px) {
+      .meta-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .meta-item {
+      font-size: 12px;
+    }
+
+    .meta-label {
+      color: var(--text-muted);
+      margin-bottom: 2px;
+    }
+
+    .meta-value {
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    /* Code Viewer */
+    .code-section {
+      display: none;
+      margin-top: 24px;
+    }
+
+    .code-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      background: #F1F5F9;
+      border: 1px solid var(--border);
+      border-bottom: none;
+      border-top-left-radius: 8px;
+      border-top-right-radius: 8px;
+    }
+
+    .code-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--badge-text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-copy {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      color: var(--badge-text);
+    }
+
+    .btn-copy:hover {
+      background: #FFFFFF;
+    }
+
+    pre {
+      margin: 0;
+      background: #FAFAFA !important;
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 8px;
+      border-bottom-right-radius: 8px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    code {
+      font-family: 'JetBrains Mono', monospace !important;
+      font-size: 13px !important;
+      line-height: 1.5 !important;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 20px;
+      font-size: 13px;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+      background: var(--card-bg);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="brand-icon">📊</div>
+      <div class="brand-text">
+        <h1>AI Excel Generator</h1>
+        <p>Natural Language to Professional Spreadsheets</p>
+      </div>
+    </div>
+    <div class="status-tags">
+      <span class="tag tag-green" id="server-status">API Ready</span>
+      <span class="tag tag-muted">Groq LPU Fast</span>
+      <span class="tag tag-muted">AST Sandbox</span>
+    </div>
+  </header>
+
+  <main>
+    <div class="card">
+      <div class="section-title">
+        <span>1. Describe your Spreadsheet</span>
+      </div>
+
+      <div class="chips-label">Quick Templates (Click to fill):</div>
+      <div class="chips-container">
+        <div class="chip" onclick="setPrompt('Create a 2026 SaaS Financial Model with Quarterly Revenue, COGS, Gross Profit, Operating Expenses, Net Income, dynamic Excel SUM formulas, and an openpyxl BarChart.')">
+          📊 SaaS 2026 Financial Model
+        </div>
+        <div class="chip" onclick="setPrompt('Create a 12-month Marketing Budget with channels (SEO, Paid Ads, Social Media, Content), monthly allocations, quarterly sub-totals, and clean currency formatting.')">
+          💰 Marketing Budget Plan
+        </div>
+        <div class="chip" onclick="setPrompt('Create a Product Inventory and Sales Analysis with SKU, Product Name, Category, Stock Level, Unit Cost, Retail Price, Profit Margin %, and conditional formatting.')">
+          🛍️ Product Inventory & Profit
+        </div>
+        <div class="chip" onclick="setPrompt('Create an Employee Salary and Bonus Matrix with Employee ID, Full Name, Department, Base Salary, Performance Score (1-5), Bonus %, Total Compensation, and department averages.')">
+          👥 Salary & Bonus Matrix
+        </div>
+      </div>
+
+      <div class="input-group">
+        <textarea id="prompt-input" placeholder="e.g. Create a 2026 SaaS quarterly budget with revenue, OpEx, net income, formulas, and a bar chart comparing quarters..."></textarea>
+      </div>
+
+      <div class="options-grid">
+        <div>
+          <label class="field-label" for="model-select">Groq Model</label>
+          <select id="model-select">
+            <option value="groq/compound" selected>Groq Compound (Multi-LPU - 30k TPM High Capacity)</option>
+            <option value="openai/gpt-oss-120b">GPT-OSS 120B (Deep Reasoning)</option>
+            <option value="qwen/qwen3.6-27b">Qwen 3.6 27B (Fast & Accurate)</option>
+            <option value="openai/gpt-oss-20b">GPT-OSS 20B (Ultra-Fast)</option>
+          </select>
+        </div>
+        <div>
+          <label class="field-label" for="filename-input">Output Filename</label>
+          <input type="text" id="filename-input" value="spreadsheet_report.xlsx" placeholder="report.xlsx">
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-primary" id="btn-generate" onclick="generateAndDownload()">
+          <span>⚡ Generate & Download (.xlsx)</span>
+        </button>
+        <button class="btn btn-secondary" id="btn-preview" onclick="previewCode()">
+          <span>👁️ Preview Code & Security</span>
+        </button>
+      </div>
+
+      <!-- Live Loading State -->
+      <div class="status-panel loading" id="status-loading">
+        <div class="spinner"></div>
+        <div>
+          <strong id="loading-msg">Generating spreadsheet script with Groq...</strong>
+          <div style="font-size: 12px; color: var(--primary);">Sanitizing via AST and executing in isolated sandbox.</div>
+        </div>
+      </div>
+
+      <!-- Success / Error Status -->
+      <div class="status-panel" id="status-result"></div>
+
+      <!-- Code Inspector -->
+      <div class="code-section" id="code-section">
+        <div class="code-header">
+          <div class="code-title">
+            <span>🛡️ Validated Python Code (openpyxl)</span>
+          </div>
+          <button class="btn-copy" onclick="copyCode()">Copy Code</button>
+        </div>
+        <pre><code class="language-python" id="code-display"></code></pre>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    Powered by Groq LPUs, Python AST Code Sanitizer & FastAPI · Minimal Light UI
+  </footer>
+
+  <script>
+    function setPrompt(text) {
+      document.getElementById('prompt-input').value = text;
+      document.getElementById('prompt-input').focus();
+    }
+
+    function showLoading(msg = "Generating spreadsheet with Groq...") {
+      document.getElementById('status-loading').style.display = 'flex';
+      document.getElementById('loading-msg').innerText = msg;
+      document.getElementById('status-result').style.display = 'none';
+      document.getElementById('btn-generate').disabled = true;
+      document.getElementById('btn-preview').disabled = true;
+    }
+
+    function hideLoading() {
+      document.getElementById('status-loading').style.display = 'none';
+      document.getElementById('btn-generate').disabled = false;
+      document.getElementById('btn-preview').disabled = false;
+    }
+
+    function showError(message) {
+      hideLoading();
+      const panel = document.getElementById('status-result');
+      panel.className = 'status-panel error';
+      panel.innerHTML = `<strong>Generation Error:</strong><br><div style="margin-top:4px; font-size:13px;">${escapeHtml(message)}</div>`;
+      panel.style.display = 'block';
+    }
+
+    function showSuccess(html) {
+      hideLoading();
+      const panel = document.getElementById('status-result');
+      panel.className = 'status-panel success';
+      panel.innerHTML = html;
+      panel.style.display = 'block';
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function displayCode(code) {
+      const codeSection = document.getElementById('code-section');
+      const codeDisplay = document.getElementById('code-display');
+      codeDisplay.textContent = code;
+      hljs.highlightElement(codeDisplay);
+      codeSection.style.display = 'block';
+    }
+
+    function copyCode() {
+      const code = document.getElementById('code-display').textContent;
+      navigator.clipboard.writeText(code).then(() => {
+        alert("Python code copied to clipboard!");
+      });
+    }
+
+    async function generateAndDownload() {
+      const prompt = document.getElementById('prompt-input').value.trim();
+      const model = document.getElementById('model-select').value;
+      const filename = document.getElementById('filename-input').value.trim() || 'report.xlsx';
+
+      if (!prompt) {
+        alert("Please enter a prompt describing the spreadsheet.");
+        return;
+      }
+
+      showLoading("Generating & executing Python code on Groq...");
+
+      try {
+        const response = await fetch('/api/generate-excel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt, model, filename })
+        });
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.detail || 'Failed to generate Excel file');
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename.endsWith('.xlsx') ? filename : filename + '.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+
+        const duration = response.headers.get('X-Duration-Seconds') || '1.0';
+        const modelUsed = response.headers.get('X-Generated-Model') || model;
+        const attempts = response.headers.get('X-Attempts-Required') || '1';
+
+        showSuccess(`
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <strong style="color:#15803D;">✅ Excel File Generated & Downloaded!</strong>
+              <div style="font-size:13px; color:#166534; margin-top:2px;">File '${escapeHtml(a.download)}' saved successfully.</div>
+            </div>
+            <button class="btn btn-secondary" onclick="previewCode()" style="padding:6px 12px; font-size:13px;">View Python Code</button>
+          </div>
+          <div class="meta-grid">
+            <div class="meta-item"><div class="meta-label">Model</div><div class="meta-value">${escapeHtml(modelUsed)}</div></div>
+            <div class="meta-item"><div class="meta-label">Execution Time</div><div class="meta-value">${duration}s</div></div>
+            <div class="meta-item"><div class="meta-label">Attempts</div><div class="meta-value">${attempts}</div></div>
+            <div class="meta-item"><div class="meta-label">Security</div><div class="meta-value" style="color:#15803D;">AST Verified</div></div>
+          </div>
+        `);
+
+      } catch (err) {
+        showError(err.message);
+      }
+    }
+
+    async function previewCode() {
+      const prompt = document.getElementById('prompt-input').value.trim();
+      const model = document.getElementById('model-select').value;
+
+      if (!prompt) {
+        alert("Please enter a prompt first.");
+        return;
+      }
+
+      showLoading("Generating and inspecting Python code...");
+
+      try {
+        const response = await fetch('/api/generate-excel/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt, model })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.detail || 'Preview generation failed');
+        }
+
+        displayCode(data.code);
+
+        showSuccess(`
+          <strong style="color:#15803D;">✅ Code Generated & AST Validated!</strong>
+          <div style="font-size:13px; color:#166534; margin-top:2px;">Inspected in isolated sandbox. Output size: ${data.file_size_bytes} bytes.</div>
+          <div class="meta-grid">
+            <div class="meta-item"><div class="meta-label">Model</div><div class="meta-value">${escapeHtml(data.model)}</div></div>
+            <div class="meta-item"><div class="meta-label">Generation Time</div><div class="meta-value">${data.duration_seconds}s</div></div>
+            <div class="meta-item"><div class="meta-label">Attempts</div><div class="meta-value">${data.attempts}</div></div>
+            <div class="meta-item"><div class="meta-label">Sandbox</div><div class="meta-value" style="color:#15803D;">Passed</div></div>
+          </div>
+        `);
+
+      } catch (err) {
+        showError(err.message);
+      }
+    }
+
+    // Check health on load
+    fetch('/health').then(res => res.json()).then(data => {
+      const tag = document.getElementById('server-status');
+      if (data.has_groq_api_key) {
+        tag.innerText = "Groq Key Active";
+        tag.className = "tag tag-green";
+      } else {
+        tag.innerText = "Missing GROQ_API_KEY";
+        tag.className = "tag tag-muted";
+      }
+    }).catch(() => {});
+  </script>
+</body>
+</html>

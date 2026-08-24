@@ -1,0 +1,169 @@
+"""
+Orchestration service for generating Excel files via Groq LLM with AST sanitization,
+isolated execution, and an automated self-healing error correction loop.
+"""
+
+import os
+import re
+import time
+from typing import Dict, Any, Tuple, Optional
+from groq import Groq
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from core.prompts import EXCEL_SYSTEM_PROMPT, SELF_HEALING_PROMPT_TEMPLATE
+from core.executor import execute_excel_code, ExecutionError
+from core.sanitizer import SecurityError
+
+
+PRIMARY_MODELS = [
+    "groq/compound",
+    "openai/gpt-oss-120b",
+    "qwen/qwen3.6-27b",
+    "openai/gpt-oss-20b"
+]
+
+
+def extract_python_code(raw_text: str) -> str:
+    """
+    Extracts pure Python code from markdown code fences or raw string,
+    stripping any <think>...</think> tags and extraneous conversational text.
+    """
+    if not raw_text:
+        return ""
+    
+    # 1. Strip reasoning / thinking tags (e.g. from DeepSeek / Qwen models)
+    cleaned = re.sub(r"<think>[\s\S]*?</think>", "", raw_text, flags=re.IGNORECASE).strip()
+    
+    # 2. Match ```python ... ```
+    match = re.search(r"```(?:python)?\s*([\s\S]*?)\s*```", cleaned, re.IGNORECASE)
+    if match:
+        extracted = match.group(1).strip()
+        if "def generate_excel" in extracted:
+            return extracted
+
+    # 3. Match any fenced code block containing def generate_excel
+    all_blocks = re.findall(r"```(?:[a-zA-Z0-9_-]+)?\s*([\s\S]*?)\s*```", cleaned)
+    for block in all_blocks:
+        if "def generate_excel" in block:
+            return block.strip()
+
+    # 4. If no fences, find the starting import or function definition
+    if "def generate_excel" in cleaned:
+        import_pos = cleaned.find("import ")
+        def_pos = cleaned.find("def generate_excel")
+        start_idx = import_pos if (import_pos != -1 and import_pos < def_pos) else def_pos
+        return cleaned[start_idx:].strip()
+
+    return cleaned
+
+
+class ExcelService:
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key or os.getenv("GROQ_API_KEY")
+        self._client: Optional[Groq] = None
+
+    @property
+    def client(self) -> Groq:
+        if self._client is None:
+            if not self.api_key:
+                raise ValueError(
+                    "GROQ_API_KEY environment variable is not set. "
+                    "Please provide an API key from https://console.groq.com"
+                )
+            self._client = Groq(api_key=self.api_key)
+        return self._client
+
+    def generate_excel(
+        self,
+        prompt: str,
+        preferred_model: str = "groq/compound",
+        max_retries: int = 2
+    ) -> Dict[str, Any]:
+        """
+        Generates an Excel spreadsheet from a natural language prompt.
+        """
+        start_time = time.time()
+        
+        models_to_try = [preferred_model] + [m for m in PRIMARY_MODELS if m != preferred_model]
+        
+        last_error = ""
+        last_code = ""
+        current_model = models_to_try[0]
+        
+        for attempt in range(1, max_retries + 2):
+            # Keep prompt compact to avoid 413 token limits
+            messages = [
+                {"role": "system", "content": EXCEL_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt}
+            ]
+            if last_error:
+                messages.append({
+                    "role": "user",
+                    "content": f"Your previous code failed with error: {last_error[:300]}\n\nPrevious Code:\n```python\n{last_code}\n```\n\nPlease fix the issue and return the complete, working Python script inside ```python ... ``` ending with wb.save(output_path)."
+                })
+
+            # Attempt LLM call with fallback on rate-limits / request size limits
+            response_text = ""
+            for model_candidate in models_to_try:
+                try:
+                    current_model = model_candidate
+                    # groq/compound supports 30k TPM, other models have 8k TPM limit
+                    model_max_tokens = 5000 if "compound" in current_model else 3800
+                    
+                    completion = self.client.chat.completions.create(
+                        model=current_model,
+                        messages=messages,
+                        temperature=0.1,
+                        max_tokens=model_max_tokens,
+                    )
+                    response_text = completion.choices[0].message.content or ""
+                    if response_text:
+                        break
+                except Exception as e:
+                    err_str = str(e).lower()
+                    if any(k in err_str for k in ["rate_limit", "429", "413", "request_too_large", "overloaded", "tpm", "rpm"]):
+                        # Check if Groq tells us how many seconds to wait
+                        wait_match = re.search(r"try again in ([\d\.]+)s", err_str)
+                        wait_sec = float(wait_match.group(1)) + 0.5 if wait_match else 1.5
+                        print(f"[Fallback] Model '{model_candidate}' hit limit. Waiting {wait_sec:.1f}s and trying next model...")
+                        time.sleep(min(wait_sec, 6.0))
+                        continue
+                    else:
+                        raise e
+
+            if not response_text:
+                if attempt <= max_retries:
+                    print(f"[Retry Attempt {attempt}] Waiting 3s for rate limit window to clear...")
+                    time.sleep(3.0)
+                    continue
+                raise RuntimeError("Failed to receive response from Groq API across all model candidates. Please wait a few seconds and try again.")
+
+            code = extract_python_code(response_text)
+            last_code = code
+
+            try:
+                # Sanitize and execute the generated Python code
+                excel_bytes = execute_excel_code(code, timeout_seconds=30)
+                
+                duration = round(time.time() - start_time, 2)
+                return {
+                    "excel_bytes": excel_bytes,
+                    "code": code,
+                    "model": current_model,
+                    "attempts": attempt,
+                    "duration_seconds": duration,
+                    "success": True
+                }
+
+            except (SecurityError, ExecutionError, Exception) as err:
+                last_error = str(err)
+                if attempt > max_retries:
+                    break
+
+        raise RuntimeError(
+            f"Failed to generate valid Excel workbook after {max_retries + 1} attempts.\n"
+            f"Last Error: {last_error}\n"
+            f"Last Code:\n{last_code}"
+        )
