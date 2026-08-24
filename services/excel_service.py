@@ -1,13 +1,13 @@
 """
-Orchestration service for generating Excel files via Groq LLM with AST sanitization,
-isolated execution, and an automated self-healing error correction loop.
+Orchestration service for generating Excel files via LLMs (DeepSeek, Groq, Vercel AI Gateway, OpenAI-compatible APIs)
+with AST sanitization, isolated sandbox execution, and an automated self-healing error correction loop.
 """
 
 import os
 import re
 import time
-from typing import Dict, Any, Tuple, Optional
-from groq import Groq
+from typing import Dict, Any, Tuple, Optional, List
+from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -17,10 +17,16 @@ from core.executor import execute_excel_code, ExecutionError
 from core.sanitizer import SecurityError
 
 
-PRIMARY_MODELS = [
-    "groq/compound",
-    "openai/gpt-oss-120b",
+# Default supported models across providers
+DEFAULT_DEEPSEEK_MODELS = [
+    "deepseek-chat",
+    "deepseek-reasoner"
+]
+
+DEFAULT_GROQ_MODELS = [
     "qwen/qwen3.6-27b",
+    "openai/gpt-oss-120b",
+    "groq/compound",
     "openai/gpt-oss-20b"
 ]
 
@@ -60,40 +66,83 @@ def extract_python_code(raw_text: str) -> str:
 
 
 class ExcelService:
-    def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or os.getenv("GROQ_API_KEY")
-        self._client: Optional[Groq] = None
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
+        default_model: Optional[str] = None
+    ):
+        self.api_key = api_key or os.getenv("DEEPSEEK_API_KEY") or os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY")
+        self.base_url = base_url or os.getenv("OPENAI_BASE_URL")
+        self.default_model = default_model
+        
+        # Auto-detect provider if base_url is not explicitly provided
+        if not self.base_url:
+            if os.getenv("DEEPSEEK_API_KEY") and (not os.getenv("GROQ_API_KEY") or self.api_key == os.getenv("DEEPSEEK_API_KEY")):
+                self.base_url = "https://api.deepseek.com"
+                if not self.default_model:
+                    self.default_model = "deepseek-chat"
+            elif os.getenv("GROQ_API_KEY"):
+                self.base_url = "https://api.groq.com/openai/v1"
+                if not self.default_model:
+                    self.default_model = "qwen/qwen3.6-27b"
+            else:
+                self.base_url = "https://api.deepseek.com"
+                if not self.default_model:
+                    self.default_model = "deepseek-chat"
+
+        self._client: Optional[OpenAI] = None
 
     @property
-    def client(self) -> Groq:
+    def client(self) -> OpenAI:
         if self._client is None:
             if not self.api_key:
                 raise ValueError(
-                    "GROQ_API_KEY environment variable is not set. "
-                    "Please provide an API key from https://console.groq.com"
+                    "No API Key provided. Please set GROQ_API_KEY or DEEPSEEK_API_KEY in your .env file."
                 )
-            self._client = Groq(api_key=self.api_key)
+            self._client = OpenAI(
+                api_key=self.api_key,
+                base_url=self.base_url
+            )
         return self._client
+
+    def get_candidate_models(self, preferred_model: Optional[str] = None) -> List[str]:
+        """Returns ordered list of fallback models depending on provider."""
+        models: List[str] = []
+        if preferred_model:
+            models.append(preferred_model)
+        
+        # If connecting to DeepSeek
+        if "deepseek.com" in (self.base_url or "") or (preferred_model and "deepseek" in preferred_model):
+            for m in DEFAULT_DEEPSEEK_MODELS:
+                if m not in models:
+                    models.append(m)
+        else:
+            for m in DEFAULT_GROQ_MODELS:
+                if m not in models:
+                    models.append(m)
+                    
+        return models
 
     def generate_excel(
         self,
         prompt: str,
-        preferred_model: str = "groq/compound",
+        preferred_model: Optional[str] = None,
         max_retries: int = 2
     ) -> Dict[str, Any]:
         """
-        Generates an Excel spreadsheet from a natural language prompt.
+        Generates an Excel spreadsheet from a natural language prompt with automated AST verification and self-healing.
         """
         start_time = time.time()
         
-        models_to_try = [preferred_model] + [m for m in PRIMARY_MODELS if m != preferred_model]
+        selected_model = preferred_model or self.default_model or "qwen/qwen3.6-27b"
+        models_to_try = self.get_candidate_models(selected_model)
         
         last_error = ""
         last_code = ""
         current_model = models_to_try[0]
         
         for attempt in range(1, max_retries + 2):
-            # Keep prompt compact to avoid 413 token limits
             messages = [
                 {"role": "system", "content": EXCEL_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt}
@@ -104,13 +153,11 @@ class ExcelService:
                     "content": f"Your previous code failed with error: {last_error[:300]}\n\nPrevious Code:\n```python\n{last_code}\n```\n\nPlease fix the issue and return the complete, working Python script inside ```python ... ``` ending with wb.save(output_path)."
                 })
 
-            # Attempt LLM call with fallback on rate-limits / request size limits
             response_text = ""
             for model_candidate in models_to_try:
                 try:
                     current_model = model_candidate
-                    # groq/compound supports 30k TPM, other models have 8k TPM limit
-                    model_max_tokens = 5000 if "compound" in current_model else 3800
+                    model_max_tokens = 5000 if ("compound" in current_model or "deepseek" in current_model) else 3800
                     
                     completion = self.client.chat.completions.create(
                         model=current_model,
@@ -124,11 +171,13 @@ class ExcelService:
                 except Exception as e:
                     err_str = str(e).lower()
                     if any(k in err_str for k in ["rate_limit", "429", "413", "request_too_large", "overloaded", "tpm", "rpm"]):
-                        # Check if Groq tells us how many seconds to wait
                         wait_match = re.search(r"try again in ([\d\.]+)s", err_str)
                         wait_sec = float(wait_match.group(1)) + 0.5 if wait_match else 1.5
-                        print(f"[Fallback] Model '{model_candidate}' hit limit. Waiting {wait_sec:.1f}s and trying next model...")
+                        print(f"[Fallback] Model '{model_candidate}' hit rate limit. Waiting {wait_sec:.1f}s and trying next candidate...")
                         time.sleep(min(wait_sec, 6.0))
+                        continue
+                    elif "decommissioned" in err_str or "not found" in err_str:
+                        print(f"[Fallback] Model '{model_candidate}' unavailable on this endpoint. Skipping to next candidate...")
                         continue
                     else:
                         raise e
@@ -138,7 +187,10 @@ class ExcelService:
                     print(f"[Retry Attempt {attempt}] Waiting 3s for rate limit window to clear...")
                     time.sleep(3.0)
                     continue
-                raise RuntimeError("Failed to receive response from Groq API across all model candidates. Please wait a few seconds and try again.")
+                raise RuntimeError(
+                    f"Failed to receive response from LLM endpoint ({self.base_url}). "
+                    "Please check your API key and connection."
+                )
 
             code = extract_python_code(response_text)
             last_code = code

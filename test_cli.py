@@ -131,29 +131,29 @@ def generate_excel(output_path: str):
         print(f"✅ PASS: Infinite loop correctly terminated by sandbox: {e}")
 
 
-def test_groq_live_prompt():
-    print("\n--- 4. Testing Live Groq Generation ---")
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key or api_key.startswith("gsk_your"):
-        print("⚠️ SKIP: No GROQ_API_KEY set in .env. Skipping live LLM test.")
-        print("   Set your key in .env to test live Groq generation.")
+def test_live_prompt():
+    print("\n--- 4. Testing Live LLM Generation ---")
+    has_key = bool(os.getenv("DEEPSEEK_API_KEY") or os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY"))
+    if not has_key:
+        print("⚠️ SKIP: No API key set in .env. Skipping live LLM test.")
         return
 
     from services.excel_service import ExcelService
-    service = ExcelService(api_key=api_key)
+    service = ExcelService()
     prompt = "Create a 12-month marketing budget breakdown with channels (SEO, PPC, Social, Content), monthly allocations, quarterly summaries, and clean openpyxl styles."
     
+    print(f"Provider Endpoint: {service.base_url}")
     print(f"Prompt: {prompt}")
-    print("Requesting code from Groq (qwen/qwen3.6-27b)...")
+    print(f"Requesting Excel code using {service.default_model}...")
     
     try:
-        result = service.generate_excel(prompt=prompt, preferred_model="qwen/qwen3.6-27b")
-        output_file = "groq_live_output.xlsx"
+        result = service.generate_excel(prompt=prompt)
+        output_file = "live_test_output.xlsx"
         with open(output_file, "wb") as f:
             f.write(result["excel_bytes"])
-        print(f"✅ PASS: Generated '{output_file}' in {result['duration_seconds']}s using {result['model']}!")
+        print(f"✅ PASS: Generated '{output_file}' ({len(result['excel_bytes'])} bytes) in {result['duration_seconds']}s using {result['model']}!")
     except Exception as e:
-        print(f"❌ FAIL: Groq generation failed: {e}")
+        print(f"❌ FAIL: LLM generation failed: {e}")
 
 
 if __name__ == "__main__":
@@ -161,5 +161,5 @@ if __name__ == "__main__":
     valid_code = test_security_sanitizer()
     test_sandbox_execution(valid_code)
     test_timeout_protection()
-    test_groq_live_prompt()
+    test_live_prompt()
     print("\n=== All Core Verification Tests Completed ===")

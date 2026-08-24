@@ -39,7 +39,7 @@ excel_service = ExcelService()
 
 class GenerateExcelRequest(BaseModel):
     prompt: str = Field(..., description="Description of the spreadsheet, tables, formulas, and charts to create.")
-    model: str = Field(default="groq/compound", description="Groq model to use.")
+    model: Optional[str] = Field(default=None, description="Model to use (e.g. deepseek-chat, qwen/qwen3.6-27b, openai/gpt-oss-120b).")
     filename: Optional[str] = Field(default="generated_report.xlsx", description="Suggested filename for download.")
 
 
@@ -58,13 +58,16 @@ def serve_index_html():
 
 @app.get("/health", tags=["System"])
 def health_check():
-    has_api_key = bool(os.getenv("GROQ_API_KEY"))
+    has_key = bool(os.getenv("DEEPSEEK_API_KEY") or os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY"))
+    provider = "DeepSeek" if os.getenv("DEEPSEEK_API_KEY") else ("Groq" if os.getenv("GROQ_API_KEY") else "OpenAI-Compatible")
     return {
         "status": "online",
         "service": "excel-generator",
-        "has_groq_api_key": has_api_key,
-        "default_model": "groq/compound",
-        "available_models": ["groq/compound", "openai/gpt-oss-120b", "qwen/qwen3.6-27b", "openai/gpt-oss-20b"],
+        "has_api_key": has_key,
+        "provider": provider,
+        "base_url": excel_service.base_url,
+        "default_model": excel_service.default_model,
+        "available_models": excel_service.get_candidate_models(),
         "sandbox": "AST_sanitizer + isolated_process"
     }
 
