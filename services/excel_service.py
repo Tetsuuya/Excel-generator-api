@@ -18,6 +18,14 @@ from core.sanitizer import SecurityError
 
 
 # Default supported models across providers
+DEFAULT_OPENROUTER_MODELS = [
+    "openrouter/free",
+    "cohere/north-mini-code:free",
+    "google/gemma-4-31b-it:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "z-ai/glm-5.2:free"
+]
+
 DEFAULT_DEEPSEEK_MODELS = [
     "deepseek-chat",
     "deepseek-reasoner"
@@ -72,24 +80,41 @@ class ExcelService:
         base_url: Optional[str] = None,
         default_model: Optional[str] = None
     ):
-        self.api_key = api_key or os.getenv("DEEPSEEK_API_KEY") or os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY")
         self.base_url = base_url or os.getenv("OPENAI_BASE_URL")
-        self.default_model = default_model
         
-        # Auto-detect provider if base_url is not explicitly provided
-        if not self.base_url:
-            if os.getenv("DEEPSEEK_API_KEY") and (not os.getenv("GROQ_API_KEY") or self.api_key == os.getenv("DEEPSEEK_API_KEY")):
-                self.base_url = "https://api.deepseek.com"
-                if not self.default_model:
-                    self.default_model = "deepseek-chat"
+        # Determine API key based on configured provider
+        if self.base_url and "openrouter" in self.base_url.lower():
+            self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+            if not default_model:
+                self.default_model = "openrouter/free"
+        elif self.base_url and "deepseek" in self.base_url.lower():
+            self.api_key = api_key or os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY")
+            if not default_model:
+                self.default_model = "deepseek-chat"
+        elif self.base_url and "groq" in self.base_url.lower():
+            self.api_key = api_key or os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY")
+            if not default_model:
+                self.default_model = "qwen/qwen3.6-27b"
+        else:
+            if os.getenv("OPENAI_API_KEY"):
+                self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+                self.base_url = self.base_url or "https://openrouter.ai/api/v1"
+                self.default_model = default_model or "openrouter/free"
+            elif os.getenv("DEEPSEEK_API_KEY"):
+                self.api_key = api_key or os.getenv("DEEPSEEK_API_KEY")
+                self.base_url = self.base_url or "https://api.deepseek.com"
+                self.default_model = default_model or "deepseek-chat"
             elif os.getenv("GROQ_API_KEY"):
-                self.base_url = "https://api.groq.com/openai/v1"
-                if not self.default_model:
-                    self.default_model = "qwen/qwen3.6-27b"
+                self.api_key = api_key or os.getenv("GROQ_API_KEY")
+                self.base_url = self.base_url or "https://api.groq.com/openai/v1"
+                self.default_model = default_model or "qwen/qwen3.6-27b"
             else:
-                self.base_url = "https://api.deepseek.com"
-                if not self.default_model:
-                    self.default_model = "deepseek-chat"
+                self.api_key = api_key
+                self.base_url = self.base_url or "https://openrouter.ai/api/v1"
+                self.default_model = default_model or "openrouter/free"
+
+        if default_model:
+            self.default_model = default_model
 
         self._client: Optional[OpenAI] = None
 
@@ -98,7 +123,7 @@ class ExcelService:
         if self._client is None:
             if not self.api_key:
                 raise ValueError(
-                    "No API Key provided. Please set GROQ_API_KEY or DEEPSEEK_API_KEY in your .env file."
+                    "No API Key provided. Please set OPENAI_API_KEY, GROQ_API_KEY, or DEEPSEEK_API_KEY in your .env file."
                 )
             self._client = OpenAI(
                 api_key=self.api_key,
@@ -112,8 +137,12 @@ class ExcelService:
         if preferred_model:
             models.append(preferred_model)
         
-        # If connecting to DeepSeek
-        if "deepseek.com" in (self.base_url or "") or (preferred_model and "deepseek" in preferred_model):
+        base = (self.base_url or "").lower()
+        if "openrouter" in base or (preferred_model and ":free" in preferred_model):
+            for m in DEFAULT_OPENROUTER_MODELS:
+                if m not in models:
+                    models.append(m)
+        elif "deepseek.com" in base or (preferred_model and "deepseek" in preferred_model):
             for m in DEFAULT_DEEPSEEK_MODELS:
                 if m not in models:
                     models.append(m)

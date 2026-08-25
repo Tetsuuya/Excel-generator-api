@@ -492,10 +492,12 @@
         <div>
           <label class="field-label" for="model-select">AI Model</label>
           <select id="model-select">
-            <option value="deepseek-chat" selected>DeepSeek V3 / Chat (Official & Gateway - Recommended)</option>
-            <option value="qwen/qwen3.6-27b">Qwen 3.6 27B (Groq LPU - Fast & Accurate)</option>
-            <option value="openai/gpt-oss-120b">GPT-OSS 120B (Groq LPU - Deep Reasoning)</option>
-            <option value="groq/compound">Groq Compound (Multi-LPU 30k TPM)</option>
+            <option value="openrouter/free" selected>Auto Free Router (OpenRouter - Free)</option>
+            <option value="google/gemma-4-31b-it:free">Gemma 4 31B (OpenRouter - Free)</option>
+            <option value="cohere/north-mini-code:free">Cohere North Mini Code (OpenRouter - Free)</option>
+            <option value="nvidia/nemotron-3-super-120b-a12b:free">Nvidia Nemotron 120B (OpenRouter - Free)</option>
+            <option value="qwen/qwen3.6-27b">Qwen 3.6 27B (Groq LPU)</option>
+            <option value="deepseek-chat">DeepSeek V3 (Official DeepSeek)</option>
           </select>
         </div>
         <div>
@@ -702,11 +704,11 @@
     // Check health on load
     fetch('/health').then(res => res.json()).then(data => {
       const tag = document.getElementById('server-status');
-      if (data.has_groq_api_key) {
-        tag.innerText = "Groq Key Active";
+      if (data.has_api_key) {
+        tag.innerText = `${data.provider || 'API'} Active`;
         tag.className = "tag tag-green";
       } else {
-        tag.innerText = "Missing GROQ_API_KEY";
+        tag.innerText = "Missing API Key";
         tag.className = "tag tag-muted";
       }
     }).catch(() => {});

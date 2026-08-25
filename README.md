@@ -23,24 +23,63 @@ A high-performance Python microservice that generates executive-grade Excel (`.x
 
 ## 🚀 Getting Started
 
-### 1. Configure `.env`
-Add your free Groq API key from [https://console.groq.com](https://console.groq.com):
+### 1. Activate the Virtual Environment (`venv`)
+
+#### **Windows (PowerShell - Recommended)**
+```powershell
+.\venv\Scripts\Activate.ps1
+```
+> *Tip: If you get a script execution policy error in PowerShell, run this first:*
+> ```powershell
+> Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+> .\venv\Scripts\Activate.ps1
+> ```
+
+#### **Windows (Command Prompt / CMD)**
+```cmd
+venv\Scripts\activate.bat
+```
+
+#### **Git Bash / Linux / macOS**
+```bash
+source venv/Scripts/activate
+# or on Linux/macOS:
+source venv/bin/activate
+```
+
+*(Once activated, you will see `(venv)` in your terminal prompt).*
+
+---
+
+### 2. Configure `.env`
+Add your API key (OpenRouter, DeepSeek, or Groq) in `.env`:
 ```env
-GROQ_API_KEY=gsk_your_groq_api_key_here
+# OpenRouter Free Tier
+OPENAI_BASE_URL=https://openrouter.ai/api/v1
+OPENAI_API_KEY=sk-or-v1-your_openrouter_key_here
+
 PORT=8001
 HOST=0.0.0.0
 ```
 
-### 2. Run the Test Suite / Verification
-```powershell
-.\venv\Scripts\python test_cli.py
-```
+---
 
-### 3. Start the FastAPI Server
+### 3. Run Verification Tests
 ```powershell
-.\venv\Scripts\uvicorn app:app --port 8001 --reload
+python test_cli.py
 ```
-Interactive Swagger API documentation will be available at: [http://localhost:8001/docs](http://localhost:8001/docs)
+*(Or without activating venv: `.\venv\Scripts\python test_cli.py`)*
+
+---
+
+### 4. Start the FastAPI Server
+```powershell
+python app.py
+# or using uvicorn:
+uvicorn app:app --port 8001 --reload
+```
+* **Web UI Dashboard**: Open [http://localhost:8001](http://localhost:8001) in your browser.
+* **Interactive Swagger API Docs**: [http://localhost:8001/docs](http://localhost:8001/docs)
 
 ---
 
