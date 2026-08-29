@@ -1,4 +1,4 @@
-"""
+﻿"""
 Orchestration service for generating Excel files via LLMs (Groq LPUs, OpenRouter, DeepSeek)
 with AST sanitization, isolated sandbox execution, and an automated self-healing error correction loop.
 """
@@ -176,9 +176,11 @@ class ExcelService:
                 {"role": "user", "content": prompt}
             ]
             if last_error:
+                # Condense last code to keep prompt compact for TPM budgets
+                code_snippet = last_code[:2200] + ("\n# ... (truncated for conciseness)" if len(last_code) > 2200 else "")
                 messages.append({
                     "role": "user",
-                    "content": f"Your previous code failed with error:\n{last_error[:300]}\n\nPrevious Code:\n```python\n{last_code}\n```\n\nPlease fix the issue and return the complete, working Python script inside ```python ... ``` ending with wb.save(output_path)."
+                    "content": f"Your previous code failed with error:\n{last_error[:250]}\n\nPrevious Code Snippet:\n```python\n{code_snippet}\n```\n\nPlease fix the issue and return the complete, working Python script inside ```python ... ``` ending with wb.save(output_path)."
                 })
 
             response_text = ""
@@ -187,11 +189,19 @@ class ExcelService:
                     used_model = model_name
                     used_provider = provider_name
                     
+                    # Dynamically calculate token limit to stay safely under Groq's 8,000 TPM limit
+                    if provider_name == "Groq":
+                        total_chars = sum(len(m.get("content", "")) for m in messages)
+                        estimated_input_tokens = total_chars // 3.5
+                        max_tokens_val = max(1000, min(2600, int(6800 - estimated_input_tokens)))
+                    else:
+                        max_tokens_val = 6500
+
                     completion = client.chat.completions.create(
                         model=model_name,
                         messages=messages,
                         temperature=0.1,
-                        max_tokens=(3800 if provider_name == "Groq" else 6500),
+                        max_tokens=max_tokens_val,
                     )
                     
                     if completion and getattr(completion, "choices", None) and len(completion.choices) > 0:
@@ -209,7 +219,7 @@ class ExcelService:
                     if any(k in err_str for k in ["rate_limit", "429", "413", "overloaded", "tpm", "rpm"]):
                         wait_match = re.search(r"try again in ([\d\.]+)s", err_str)
                         wait_sec = float(wait_match.group(1)) + 0.5 if wait_match else 1.0
-                        time.sleep(min(wait_sec, 4.0))
+                        time.sleep(min(wait_sec, 3.0))
                     continue
 
             if not response_text:
@@ -249,4 +259,3 @@ class ExcelService:
             f"Last Error: {last_error}\n"
             f"Last Code:\n{last_code}"
         )
-
