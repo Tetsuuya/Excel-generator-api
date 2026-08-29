@@ -293,3 +293,59 @@ def autofit_columns(ws: Worksheet, min_width: int = 12) -> None:
         col_let = get_column_letter(col[0].column)
         max_len = max([len(str(c.value or '')) for c in col] + [min_width])
         ws.column_dimensions[col_let].width = min(max_len + 3, 40)
+
+def add_bar_chart(
+    ws: Worksheet,
+    title: str,
+    data_sheet: Worksheet,
+    data_min_col: int,
+    data_min_row: int,
+    data_max_col: int,
+    data_max_row: int,
+    cats_min_col: int,
+    cats_min_row: int,
+    cats_max_row: int,
+    position: str = "B12",
+    width: int = 16,
+    height: int = 10
+) -> BarChart:
+    """Adds a clean BarChart to the worksheet in 1 line of code."""
+    chart = BarChart()
+    chart.type = "col"
+    chart.style = 10
+    chart.title = title
+    chart.width = width
+    chart.height = height
+    data = Reference(data_sheet, min_col=data_min_col, min_row=data_min_row, max_col=data_max_col, max_row=data_max_row)
+    cats = Reference(data_sheet, min_col=cats_min_col, min_row=cats_min_row, max_row=cats_max_row)
+    chart.add_data(data, titles_from_data=True)
+    chart.set_categories(cats)
+    ws.add_chart(chart, position)
+    return chart
+
+
+def add_pie_chart(
+    ws: Worksheet,
+    title: str,
+    data_sheet: Worksheet,
+    data_col: int,
+    data_min_row: int,
+    data_max_row: int,
+    cats_col: int,
+    cats_min_row: int,
+    cats_max_row: int,
+    position: str = "J12",
+    width: int = 14,
+    height: int = 10
+) -> PieChart:
+    """Adds a clean PieChart to the worksheet in 1 line of code."""
+    chart = PieChart()
+    chart.title = title
+    chart.width = width
+    chart.height = height
+    data = Reference(data_sheet, min_col=data_col, min_row=data_min_row, max_row=data_max_row)
+    cats = Reference(data_sheet, min_col=cats_col, min_row=cats_min_row, max_row=cats_max_row)
+    chart.add_data(data, titles_from_data=True)
+    chart.set_categories(cats)
+    ws.add_chart(chart, position)
+    return chart
