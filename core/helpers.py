@@ -1,17 +1,18 @@
 ﻿"""
-Executive Excel Helper Toolkit.
-Provides high-level, rock-solid functions to build professional Excel workbooks (.xlsx)
-with KPI summary cards, styled tables, zebra striping, currency formatting, and native charts.
+Executive Multi-Tab Excel Helper Toolkit.
+Provides high-level, rock-solid functions to build enterprise-grade, multi-tab Excel workbooks (.xlsx)
+with KPI summary cards, raw data registries, analytical breakdown sheets, and native charts.
 """
 
-from typing import List, Tuple, Any, Optional, Dict
+from typing import List, Tuple, Any, Optional, Dict, Union
+import pandas as pd
 from openpyxl import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.chart import BarChart, LineChart, PieChart, Reference
 from openpyxl.utils import get_column_letter
 
-# --- Corporate Palette ---
+# --- Corporate Executive Palette ---
 COLOR_NAVY = "0F172A"       # Primary dark header
 COLOR_ICE = "F1F5F9"        # KPI Card background
 COLOR_ZEBRA = "F8FAFC"      # Soft zebra striping
@@ -19,6 +20,7 @@ COLOR_BORDER = "CBD5E1"     # Subtle cell border
 COLOR_MUTED = "64748B"      # Subtitles & secondary labels
 COLOR_SUCCESS = "10B981"    # Positive deltas
 COLOR_WHITE = "FFFFFF"      # Header text
+COLOR_TOTAL = "E2E8F0"      # Total row background
 
 # --- Number Format Tokens ---
 FMT_CURRENCY = '"$"#,##0'
@@ -35,7 +37,7 @@ CARD_BORDER = Border(left=THIN_SIDE, right=THIN_SIDE, top=THIN_SIDE, bottom=THIN
 
 
 def create_workbook(title: str = "Executive Dashboard", subtitle: str = "Generated via AI Analytics") -> Tuple[Workbook, Worksheet]:
-    """Creates a new styled workbook with metadata title banner and visible gridlines."""
+    """Creates a new styled workbook with metadata title banner on the primary Dashboard tab."""
     wb = Workbook()
     ws = wb.active
     ws.title = "Dashboard"
@@ -62,7 +64,7 @@ def create_workbook(title: str = "Executive Dashboard", subtitle: str = "Generat
 
 def add_kpi_cards(ws: Worksheet, cards: List[Tuple[str, Any, str]], start_col_idx: int = 2, start_row: int = 5) -> None:
     """
-    Renders 3-4 side-by-side executive KPI summary cards.
+    Renders 3-5 side-by-side executive KPI summary cards.
     cards: List of (label, value, context_delta)
     """
     ws.row_dimensions[start_row].height = 18
@@ -165,18 +167,16 @@ def add_table(
 
         current_row += 1
 
-    # 3. Total Row (if enabled)
+    # 3. Total Row
     if show_total:
         ws.row_dimensions[current_row].height = 22
-        total_fill = PatternFill("solid", fgColor="E2E8F0")
+        total_fill = PatternFill("solid", fgColor=COLOR_TOTAL)
 
-        # Label cell
         lbl = ws.cell(row=current_row, column=start_col, value="TOTAL")
         lbl.font = Font(name="Segoe UI", size=10, bold=True, color=COLOR_NAVY)
         lbl.fill = total_fill
         lbl.border = Border(top=THIN_SIDE, bottom=DOUBLE_BOTTOM)
 
-        # Sum formulas for numeric/currency columns
         for c_idx in range(1, len(headers)):
             col_num = start_col + c_idx
             col_let = get_column_letter(col_num)
@@ -185,7 +185,7 @@ def add_table(
             c.font = Font(name="Segoe UI", size=10, bold=True, color=COLOR_NAVY)
             c.border = Border(top=THIN_SIDE, bottom=DOUBLE_BOTTOM)
 
-            if c_idx in currency_cols or c_idx in (percent_cols or []):
+            if c_idx in currency_cols or c_idx in percent_cols:
                 if c_idx in percent_cols:
                     c.value = f"=AVERAGE({col_let}{start_row + 1}:{col_let}{current_row - 1})"
                     c.number_format = FMT_PERCENT
@@ -193,7 +193,7 @@ def add_table(
                     c.value = f"=SUM({col_let}{start_row + 1}:{col_let}{current_row - 1})"
                     c.number_format = FMT_CURRENCY
                 c.alignment = Alignment(horizontal="right", vertical="center")
-            elif any(isinstance(data[r][c_idx], (int, float)) for r in range(min(len(data), 3))):
+            elif len(data) > 0 and isinstance(data[0][c_idx], (int, float)):
                 c.value = f"=SUM({col_let}{start_row + 1}:{col_let}{current_row - 1})"
                 c.number_format = FMT_NUMBER
                 c.alignment = Alignment(horizontal="right", vertical="center")
@@ -202,6 +202,89 @@ def add_table(
 
     autofit_columns(ws)
     return current_row
+
+
+def add_sheet_from_df(
+    wb: Workbook,
+    sheet_title: str,
+    df: pd.DataFrame,
+    page_title: Optional[str] = None,
+    subtitle: Optional[str] = None,
+    currency_cols: Optional[List[int]] = None,
+    percent_cols: Optional[List[int]] = None,
+    date_cols: Optional[List[int]] = None,
+    show_total: bool = True
+) -> Worksheet:
+    """
+    Creates a new styled worksheet directly from a pandas DataFrame with title banner, navy headers,
+    zebra striping, and column auto-fitting.
+    """
+    ws = wb.create_sheet(title=sheet_title)
+    ws.sheet_view.showGridLines = True
+    ws.column_dimensions["A"].width = 3
+
+    # Title Banner
+    p_title = page_title or sheet_title
+    ws["B2"] = p_title
+    ws["B2"].font = Font(name="Segoe UI", size=15, bold=True, color=COLOR_NAVY)
+    
+    if subtitle:
+        ws["B3"] = subtitle
+        ws["B3"].font = Font(name="Segoe UI", size=9, italic=True, color=COLOR_MUTED)
+
+    headers = list(df.columns)
+    data = df.values.tolist()
+
+    add_table(
+        ws=ws,
+        start_row=5 if subtitle else 4,
+        start_col=2,
+        headers=headers,
+        data=data,
+        currency_cols=currency_cols,
+        percent_cols=percent_cols,
+        date_cols=date_cols,
+        show_total=show_total
+    )
+
+    ws.freeze_panes = f"B{6 if subtitle else 5}"
+    autofit_columns(ws)
+    return ws
+
+
+def add_raw_data_sheet(
+    wb: Workbook,
+    sheet_title: str,
+    df: pd.DataFrame,
+    currency_cols: Optional[List[int]] = None,
+    date_cols: Optional[List[int]] = None,
+    percent_cols: Optional[List[int]] = None
+) -> Worksheet:
+    """
+    Creates a dedicated high-capacity Raw Data worksheet for 100 to 10,000+ granular records.
+    """
+    ws = wb.create_sheet(title=sheet_title)
+    ws.sheet_view.showGridLines = True
+
+    headers = list(df.columns)
+    data = df.values.tolist()
+
+    add_table(
+        ws=ws,
+        start_row=1,
+        start_col=1,
+        headers=headers,
+        data=data,
+        currency_cols=currency_cols,
+        percent_cols=percent_cols,
+        date_cols=date_cols,
+        show_total=False,
+        zebra=True
+    )
+
+    ws.freeze_panes = "A2"
+    autofit_columns(ws)
+    return ws
 
 
 def autofit_columns(ws: Worksheet, min_width: int = 12) -> None:
