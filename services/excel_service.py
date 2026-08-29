@@ -1,5 +1,5 @@
 """
-Orchestration service for generating Excel files via LLMs (DeepSeek, Groq, Vercel AI Gateway, OpenAI-compatible APIs)
+Orchestration service for generating Excel files via LLMs (Groq LPUs, OpenRouter, DeepSeek)
 with AST sanitization, isolated sandbox execution, and an automated self-healing error correction loop.
 """
 
@@ -18,24 +18,22 @@ from core.sanitizer import SecurityError
 
 
 # Default supported models across providers
-DEFAULT_OPENROUTER_MODELS = [
-    "openrouter/free",
-    "cohere/north-mini-code:free",
-    "google/gemma-4-31b-it:free",
-    "nvidia/nemotron-3-super-120b-a12b:free",
-    "z-ai/glm-5.2:free"
-]
-
-DEFAULT_DEEPSEEK_MODELS = [
-    "deepseek-chat",
-    "deepseek-reasoner"
-]
-
 DEFAULT_GROQ_MODELS = [
-    "qwen/qwen3.6-27b",
+    "qwen/qwen3.8-27b",
     "openai/gpt-oss-120b",
+    "qwen/qwen3.6-27b",
     "groq/compound",
     "openai/gpt-oss-20b"
+]
+
+DEFAULT_OPENROUTER_MODELS = [
+    "openrouter/free",
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "google/gemma-4-31b-it:free",
+    "qwen/qwen-2.5-coder-32b-instruct:free",
+    "cohere/north-mini-code:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "z-ai/glm-5.2:free"
 ]
 
 
@@ -47,7 +45,7 @@ def extract_python_code(raw_text: str) -> str:
     if not raw_text:
         return ""
     
-    # 1. Strip reasoning / thinking tags (e.g. from DeepSeek / Qwen models)
+    # 1. Strip reasoning / thinking tags (e.g. from DeepSeek / Qwen / Groq R1 models)
     cleaned = re.sub(r"<think>[\s\S]*?</think>", "", raw_text, flags=re.IGNORECASE).strip()
     
     # 2. Match ```python ... ```
@@ -80,78 +78,74 @@ class ExcelService:
         base_url: Optional[str] = None,
         default_model: Optional[str] = None
     ):
-        self.base_url = base_url or os.getenv("OPENAI_BASE_URL")
+        self.groq_key = os.getenv("GROQ_API_KEY")
+        self.openrouter_key = os.getenv("OPENAI_API_KEY")
         
-        # Determine API key based on configured provider
-        if self.base_url and "openrouter" in self.base_url.lower():
-            self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-            if not default_model:
-                self.default_model = "openrouter/free"
-        elif self.base_url and "deepseek" in self.base_url.lower():
-            self.api_key = api_key or os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY")
-            if not default_model:
-                self.default_model = "deepseek-chat"
-        elif self.base_url and "groq" in self.base_url.lower():
-            self.api_key = api_key or os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY")
-            if not default_model:
-                self.default_model = "qwen/qwen3.6-27b"
+        # Primary provider setup (Prefer Groq for blazing speed if key is present)
+        if self.groq_key:
+            self.primary_provider = "Groq"
+            self.base_url = "https://api.groq.com/openai/v1"
+            self.api_key = self.groq_key
+            self.default_model = default_model or "llama-3.3-70b-versatile"
+        elif self.openrouter_key:
+            self.primary_provider = "OpenRouter"
+            self.base_url = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
+            self.api_key = self.openrouter_key
+            self.default_model = default_model or "openrouter/free"
         else:
-            if os.getenv("OPENAI_API_KEY"):
-                self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-                self.base_url = self.base_url or "https://openrouter.ai/api/v1"
-                self.default_model = default_model or "openrouter/free"
-            elif os.getenv("DEEPSEEK_API_KEY"):
-                self.api_key = api_key or os.getenv("DEEPSEEK_API_KEY")
-                self.base_url = self.base_url or "https://api.deepseek.com"
-                self.default_model = default_model or "deepseek-chat"
-            elif os.getenv("GROQ_API_KEY"):
-                self.api_key = api_key or os.getenv("GROQ_API_KEY")
-                self.base_url = self.base_url or "https://api.groq.com/openai/v1"
-                self.default_model = default_model or "qwen/qwen3.6-27b"
-            else:
-                self.api_key = api_key
-                self.base_url = self.base_url or "https://openrouter.ai/api/v1"
-                self.default_model = default_model or "openrouter/free"
+            self.primary_provider = "Custom"
+            self.base_url = base_url or "https://openrouter.ai/api/v1"
+            self.api_key = api_key
+            self.default_model = default_model or "openrouter/free"
 
-        if default_model:
-            self.default_model = default_model
-
-        self._client: Optional[OpenAI] = None
+        # Clients for multi-provider fallback
+        self._groq_client: Optional[OpenAI] = None
+        self._openrouter_client: Optional[OpenAI] = None
 
     @property
-    def client(self) -> OpenAI:
-        if self._client is None:
-            if not self.api_key:
-                raise ValueError(
-                    "No API Key provided. Please set OPENAI_API_KEY, GROQ_API_KEY, or DEEPSEEK_API_KEY in your .env file."
-                )
-            self._client = OpenAI(
-                api_key=self.api_key,
-                base_url=self.base_url
+    def groq_client(self) -> Optional[OpenAI]:
+        if self._groq_client is None and self.groq_key:
+            self._groq_client = OpenAI(
+                api_key=self.groq_key,
+                base_url="https://api.groq.com/openai/v1"
             )
-        return self._client
+        return self._groq_client
 
-    def get_candidate_models(self, preferred_model: Optional[str] = None) -> List[str]:
-        """Returns ordered list of fallback models depending on provider."""
-        models: List[str] = []
-        if preferred_model:
-            models.append(preferred_model)
+    @property
+    def openrouter_client(self) -> Optional[OpenAI]:
+        if self._openrouter_client is None and self.openrouter_key:
+            self._openrouter_client = OpenAI(
+                api_key=self.openrouter_key,
+                base_url=os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
+            )
+        return self._openrouter_client
+
+    def get_candidate_targets(self, preferred_model: Optional[str] = None) -> List[Tuple[str, str, OpenAI]]:
+        """
+        Returns an ordered list of (provider_name, model_name, client_instance) targets for resilient cascade.
+        """
+        targets: List[Tuple[str, str, OpenAI]] = []
         
-        base = (self.base_url or "").lower()
-        if "openrouter" in base or (preferred_model and ":free" in preferred_model):
-            for m in DEFAULT_OPENROUTER_MODELS:
-                if m not in models:
-                    models.append(m)
-        elif "deepseek.com" in base or (preferred_model and "deepseek" in preferred_model):
-            for m in DEFAULT_DEEPSEEK_MODELS:
-                if m not in models:
-                    models.append(m)
-        else:
-            for m in DEFAULT_GROQ_MODELS:
-                if m not in models:
-                    models.append(m)
-                    
-        return models
+        # 1. Preferred model if specified
+        if preferred_model:
+            if self.groq_client and any(m in preferred_model.lower() for m in ["llama", "groq", "gemma", "mixtral"]):
+                targets.append(("Groq", preferred_model, self.groq_client))
+            elif self.openrouter_client:
+                targets.append(("OpenRouter", preferred_model, self.openrouter_client))
+
+        # 2. Add Groq models (Blazing fast LPUs)
+        if self.groq_client:
+            for gm in DEFAULT_GROQ_MODELS:
+                if not any(t[1] == gm for t in targets):
+                    targets.append(("Groq", gm, self.groq_client))
+
+        # 3. Add OpenRouter models as secondary backup
+        if self.openrouter_client:
+            for om in DEFAULT_OPENROUTER_MODELS:
+                if not any(t[1] == om for t in targets):
+                    targets.append(("OpenRouter", om, self.openrouter_client))
+
+        return targets
 
     def generate_excel(
         self,
@@ -160,17 +154,19 @@ class ExcelService:
         max_retries: int = 2
     ) -> Dict[str, Any]:
         """
-        Generates an Excel spreadsheet from a natural language prompt with automated AST verification and self-healing.
+        Generates an Excel spreadsheet with automated multi-provider fallback and self-healing.
         """
         start_time = time.time()
+        targets = self.get_candidate_targets(preferred_model)
         
-        selected_model = preferred_model or self.default_model or "qwen/qwen3.6-27b"
-        models_to_try = self.get_candidate_models(selected_model)
-        
+        if not targets:
+            raise ValueError("No LLM API keys configured. Please set GROQ_API_KEY or OPENAI_API_KEY in your .env.")
+
         last_error = ""
         last_code = ""
-        current_model = models_to_try[0]
-        
+        used_model = targets[0][1]
+        used_provider = targets[0][0]
+
         for attempt in range(1, max_retries + 2):
             messages = [
                 {"role": "system", "content": EXCEL_SYSTEM_PROMPT},
@@ -179,60 +175,61 @@ class ExcelService:
             if last_error:
                 messages.append({
                     "role": "user",
-                    "content": f"Your previous code failed with error: {last_error[:300]}\n\nPrevious Code:\n```python\n{last_code}\n```\n\nPlease fix the issue and return the complete, working Python script inside ```python ... ``` ending with wb.save(output_path)."
+                    "content": f"Your previous code failed with error:\n{last_error[:300]}\n\nPrevious Code:\n```python\n{last_code}\n```\n\nPlease fix the issue and return the complete, working Python script inside ```python ... ``` ending with wb.save(output_path)."
                 })
 
             response_text = ""
-            for model_candidate in models_to_try:
+            for provider_name, model_name, client in targets:
                 try:
-                    current_model = model_candidate
-                    model_max_tokens = 7500
+                    used_model = model_name
+                    used_provider = provider_name
                     
-                    completion = self.client.chat.completions.create(
-                        model=current_model,
+                    completion = client.chat.completions.create(
+                        model=model_name,
                         messages=messages,
                         temperature=0.1,
-                        max_tokens=model_max_tokens,
+                        max_tokens=6500,
                     )
-                    response_text = completion.choices[0].message.content or ""
-                    if response_text:
+                    
+                    if completion and getattr(completion, "choices", None) and len(completion.choices) > 0:
+                        first_choice = completion.choices[0]
+                        if hasattr(first_choice, "message") and first_choice.message:
+                            response_text = first_choice.message.content or ""
+                    
+                    if response_text and response_text.strip():
                         break
+                    else:
+                        print(f"[Fallback] {provider_name} '{model_name}' returned empty content. Trying next...")
                 except Exception as e:
                     err_str = str(e).lower()
-                    if any(k in err_str for k in ["rate_limit", "429", "413", "request_too_large", "overloaded", "tpm", "rpm"]):
+                    print(f"[Fallback] {provider_name} '{model_name}' error: {e}. Trying next candidate...")
+                    if any(k in err_str for k in ["rate_limit", "429", "413", "overloaded", "tpm", "rpm"]):
                         wait_match = re.search(r"try again in ([\d\.]+)s", err_str)
-                        wait_sec = float(wait_match.group(1)) + 0.5 if wait_match else 1.5
-                        print(f"[Fallback] Model '{model_candidate}' hit rate limit. Waiting {wait_sec:.1f}s and trying next candidate...")
-                        time.sleep(min(wait_sec, 6.0))
-                        continue
-                    elif "decommissioned" in err_str or "not found" in err_str:
-                        print(f"[Fallback] Model '{model_candidate}' unavailable on this endpoint. Skipping to next candidate...")
-                        continue
-                    else:
-                        raise e
+                        wait_sec = float(wait_match.group(1)) + 0.5 if wait_match else 1.0
+                        time.sleep(min(wait_sec, 4.0))
+                    continue
 
             if not response_text:
                 if attempt <= max_retries:
-                    print(f"[Retry Attempt {attempt}] Waiting 3s for rate limit window to clear...")
-                    time.sleep(3.0)
+                    time.sleep(2.0)
                     continue
                 raise RuntimeError(
-                    f"Failed to receive response from LLM endpoint ({self.base_url}). "
-                    "Please check your API key and connection."
+                    f"Failed to receive response from any LLM provider (Groq / OpenRouter). "
+                    "Please check your API keys and internet connection."
                 )
 
             code = extract_python_code(response_text)
             last_code = code
 
             try:
-                # Sanitize and execute the generated Python code
-                excel_bytes = execute_excel_code(code, timeout_seconds=30)
+                # Sanitize and execute in sandbox with 60s window
+                excel_bytes = execute_excel_code(code, timeout_seconds=60)
                 
                 duration = round(time.time() - start_time, 2)
                 return {
                     "excel_bytes": excel_bytes,
                     "code": code,
-                    "model": current_model,
+                    "model": f"{used_provider}:{used_model}",
                     "attempts": attempt,
                     "duration_seconds": duration,
                     "success": True
@@ -240,6 +237,7 @@ class ExcelService:
 
             except (SecurityError, ExecutionError, Exception) as err:
                 last_error = str(err)
+                print(f"[Self-Healing Triggered] Execution error on attempt {attempt}: {err}")
                 if attempt > max_retries:
                     break
 
