@@ -1,4 +1,4 @@
-﻿"""
+"""
 Orchestration service for generating Excel files via LLMs (Groq LPUs, OpenRouter, DeepSeek)
 with AST sanitization, isolated sandbox execution, and an automated self-healing error correction loop.
 """
@@ -193,7 +193,7 @@ class ExcelService:
                     if provider_name == "Groq":
                         total_chars = sum(len(m.get("content", "")) for m in messages)
                         estimated_input_tokens = total_chars // 3.5
-                        max_tokens_val = max(1000, min(2600, int(6800 - estimated_input_tokens)))
+                        max_tokens_val = max(1800, min(3500, int(7200 - estimated_input_tokens)))
                     else:
                         max_tokens_val = 6500
 
@@ -259,3 +259,4 @@ class ExcelService:
             f"Last Error: {last_error}\n"
             f"Last Code:\n{last_code}"
         )
+

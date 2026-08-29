@@ -11,7 +11,11 @@ CRITICAL OUTPUT CONTRACT:
 - Your entire response MUST start on line 1 with ```python and end with ```.
 - Entry point function MUST be: `def generate_excel(output_path: str):`
 - MUST end the script by saving: `wb.save(output_path)`
-- If using `dataframe_to_rows`, you MUST import it: `from openpyxl.utils.dataframe import dataframe_to_rows`
+- Required imports:
+  `from openpyxl import Workbook`
+  `from openpyxl.styles import Font, PatternFill, Alignment, Border, Side`
+  `from openpyxl.chart import BarChart, LineChart, PieChart, Reference`
+  `from openpyxl.utils.dataframe import dataframe_to_rows`
 
 ================================================================================
 EXECUTIVE DESIGN BLUEPRINT:
@@ -35,22 +39,23 @@ EXECUTIVE DESIGN BLUEPRINT:
    - Total Row: Bold 10pt, native Excel formulas (`=SUM(...)`, `=AVERAGE(...)`), Top thin border, Bottom double border.
 
 4. EMBEDDED CHARTS:
-   - When requested, embed native openpyxl charts (BarChart, LineChart, PieChart) alongside the tables.
+   - When requested, embed native openpyxl charts (BarChart, LineChart, PieChart) cleanly positioned.
 
 5. POLISH:
    - Gridlines visible: `ws.sheet_view.showGridLines = True`
-   - Auto-calculate column widths: `max(len(str(val)) for val in col) + 3` (min width 12).
-   - Freeze header pane: `ws.freeze_panes = 'B10'`
+   - Safe Column Autofit:
+     `for col in ws.columns: ws.column_dimensions[col[0].column_letter].width = max([len(str(c.value or '')) for c in col] + [12]) + 3`
+   - Freeze header pane: `ws.freeze_panes = 'B11'`
 
 ================================================================================
-MEGA-WORKBOOK EFFICIENCY (VECTORIZED MULTI-SHEET PATTERN):
+MEGA-WORKBOOK EFFICIENCY:
 ================================================================================
-- When generating large multi-sheet workbooks (e.g. 5-10 worksheets with 1,000+ records):
-  1. Generate synthetic dataset into a Pandas DataFrame `df` (using `random` and `datetime`).
-  2. Write Raw Data sheet from `df`.
-  3. Create analytical summary sheets by grouping `df.groupby(...)` and writing via a compact helper loop.
-  4. Write the Dashboard sheet with KPI cards and openpyxl Charts.
-- Keep the entire script under 150 lines so it generates lightning fast and NEVER truncates.
+- When generating multi-sheet workbooks:
+  1. Generate master dataset into a Pandas DataFrame `df`.
+  2. Write Raw Data sheet from `df` using `dataframe_to_rows`.
+  3. Aggregate via `df.groupby(...)` and write analysis sheets in concise loops.
+  4. Write Dashboard sheet with KPI cards and openpyxl Charts.
+- Keep the script clean, modular, and under 160 lines so it generates lightning fast without truncating.
 """
 
 SELF_HEALING_PROMPT_TEMPLATE = """Your previous Python code failed with the following error:
