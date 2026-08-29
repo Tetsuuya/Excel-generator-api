@@ -1,4 +1,4 @@
-"""
+﻿"""
 Orchestration service for generating Excel files via LLMs (Groq LPUs, OpenRouter, DeepSeek)
 with AST sanitization, isolated sandbox execution, and an automated self-healing error correction loop.
 """
@@ -28,9 +28,7 @@ DEFAULT_GROQ_MODELS = [
 
 DEFAULT_OPENROUTER_MODELS = [
     "openrouter/free",
-    "meta-llama/llama-3.3-70b-instruct:free",
     "google/gemma-4-31b-it:free",
-    "qwen/qwen-2.5-coder-32b-instruct:free",
     "cohere/north-mini-code:free",
     "nvidia/nemotron-3-super-120b-a12b:free",
     "z-ai/glm-5.2:free"
@@ -86,7 +84,7 @@ class ExcelService:
             self.primary_provider = "Groq"
             self.base_url = "https://api.groq.com/openai/v1"
             self.api_key = self.groq_key
-            self.default_model = default_model or "llama-3.3-70b-versatile"
+            self.default_model = default_model or "qwen/qwen3.8-27b"
         elif self.openrouter_key:
             self.primary_provider = "OpenRouter"
             self.base_url = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
@@ -120,6 +118,11 @@ class ExcelService:
             )
         return self._openrouter_client
 
+    def get_candidate_models(self, preferred_model: Optional[str] = None) -> List[str]:
+        """Returns list of model names available in the fallback cascade."""
+        targets = self.get_candidate_targets(preferred_model)
+        return [f"{t[0]}:{t[1]}" for t in targets]
+
     def get_candidate_targets(self, preferred_model: Optional[str] = None) -> List[Tuple[str, str, OpenAI]]:
         """
         Returns an ordered list of (provider_name, model_name, client_instance) targets for resilient cascade.
@@ -128,7 +131,7 @@ class ExcelService:
         
         # 1. Preferred model if specified
         if preferred_model:
-            if self.groq_client and any(m in preferred_model.lower() for m in ["llama", "groq", "gemma", "mixtral"]):
+            if self.groq_client and any(m in preferred_model.lower() for m in ["qwen", "groq", "gpt-oss", "llama"]):
                 targets.append(("Groq", preferred_model, self.groq_client))
             elif self.openrouter_client:
                 targets.append(("OpenRouter", preferred_model, self.openrouter_client))
@@ -246,4 +249,3 @@ class ExcelService:
             f"Last Error: {last_error}\n"
             f"Last Code:\n{last_code}"
         )
-
