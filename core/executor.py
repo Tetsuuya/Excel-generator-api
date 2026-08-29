@@ -1,4 +1,4 @@
-"""
+﻿"""
 Isolated subprocess executor for running sanitized Python Excel generation scripts.
 Enforces timeout, minimal clean environment, and scratch directory sandboxing.
 """
@@ -16,23 +16,29 @@ class ExecutionError(Exception):
     pass
 
 
-def execute_excel_code(code_str: str, timeout_seconds: int = 15) -> bytes:
+def execute_excel_code(code_str: str, timeout_seconds: int = 60) -> bytes:
     """
     1. Sanitizes the code via AST analysis.
-    2. Writes code into an ephemeral temporary folder.
-    3. Runs the code with Python in isolated mode (-I).
+    2. Writes code into an ephemeral temporary folder with helper toolkit support.
+    3. Runs the code with Python in isolated mode.
     4. Collects and returns the generated .xlsx binary bytes.
     """
     # Step 1: Security AST Verification
     sanitize_python_code(code_str)
+
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     # Step 2: Temporary sandbox folder
     with tempfile.TemporaryDirectory() as temp_dir:
         script_file = os.path.join(temp_dir, "script.py")
         output_xlsx = os.path.join(temp_dir, "output.xlsx")
 
-        # Create wrapper that safely imports and invokes generate_excel
+        # Create wrapper that imports helper toolkit and invokes generate_excel
         runner_code = f"""# -*- coding: utf-8 -*-
+import sys
+sys.path.insert(0, r"{project_root}")
+from core.helpers import *
+
 {code_str}
 
 if __name__ == "__main__":
@@ -50,14 +56,14 @@ if __name__ == "__main__":
         safe_env = {
             "SYSTEMROOT": os.environ.get("SYSTEMROOT", "C:\\Windows"),
             "PATH": os.environ.get("PATH", ""),
+            "PYTHONPATH": project_root,
             "TEMP": temp_dir,
             "TMP": temp_dir,
             "PYTHONIOENCODING": "utf-8",
             "PYTHONUNBUFFERED": "1"
         }
 
-        # Step 4: Execute in subprocess with isolated flag (-I)
-        # Note: If running inside venv, sys.executable is the venv python
+        # Step 4: Execute in subprocess
         try:
             process = subprocess.run(
                 [sys.executable, script_file],

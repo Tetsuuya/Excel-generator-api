@@ -1,4 +1,4 @@
-"""
+﻿"""
 AST-based static code analyzer to sanitize and validate AI-generated Python code
 before execution. Prevents RCE, unauthorized module imports, and system tampering.
 """
@@ -19,7 +19,8 @@ ALLOWED_ROOT_MODULES: Set[str] = {
     "collections",
     "re",
     "json",
-    "string"
+    "string",
+    "core"
 }
 
 FORBIDDEN_NAMES: Set[str] = {
@@ -114,7 +115,6 @@ class CodeSanitizer(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call):
-        # Disallow calling forbidden built-ins dynamically or by name
         if isinstance(node.func, ast.Name):
             if node.func.id in FORBIDDEN_NAMES:
                 raise SecurityError(f"Security Violation: Forbidden call '{node.func.id}()'")
