@@ -186,7 +186,7 @@ class ExcelService:
             for model_candidate in models_to_try:
                 try:
                     current_model = model_candidate
-                    model_max_tokens = 5000 if ("compound" in current_model or "deepseek" in current_model) else 3800
+                    model_max_tokens = 7500
                     
                     completion = self.client.chat.completions.create(
                         model=current_model,
@@ -248,3 +248,4 @@ class ExcelService:
             f"Last Error: {last_error}\n"
             f"Last Code:\n{last_code}"
         )
+
